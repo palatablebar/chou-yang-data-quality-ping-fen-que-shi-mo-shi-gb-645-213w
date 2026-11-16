@@ -9,6 +9,10 @@ from ... import config, reasons
 from .cells import is_missing
 
 
+def _scored_missing(cell: dict) -> bool:
+    return cell.get("state") != "structural_missing" and is_missing(cell)
+
+
 def find_runs(profile: dict, min_len: int = config.MISSING_RUN_MIN) -> list[dict]:
     columns = [column for column in profile["columns"]]
     rows = profile["rows"]
@@ -17,7 +21,7 @@ def find_runs(profile: dict, min_len: int = config.MISSING_RUN_MIN) -> list[dict
         name = column["name"]
         current: list[int] = []
         for row in rows:
-            if is_missing(row["cells"][name]):
+            if _scored_missing(row["cells"][name]):
                 current.append(row["lineno"])
                 continue
             _flush(runs, column, current, min_len)

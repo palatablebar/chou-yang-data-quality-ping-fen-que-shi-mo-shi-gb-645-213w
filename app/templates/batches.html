@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 {% block body %}
 <h1 class="title">评分批次</h1>
+{% if result and result.coverage %}
+<p class="statline">
+  <span>当前运行模板 <b>{{ result.coverage.template_label }}</b></span>
+  <span>有效口径 <b class="num">{{ result.score.score }}</b> 分</span>
+  <span>核心口径 <b class="num">{{ result.core_score.score if result.core_score else "—" }}</b> 分</span>
+  <span>豁免单元格 <b class="num">{{ result.coverage.exempted_cells|intf }}</b></span>
+</p>
+{% endif %}
 
 <section class="block">
   <h2 class="block__title">运行</h2>
@@ -68,6 +76,7 @@
   <h2 class="block__title">导出</h2>
   <p class="links">
     <a class="link" href="/api/export/report.csv">导出报告</a>
+    <a class="link" href="/api/export/coverage.csv">字段覆盖 CSV</a>
     <a class="link" href="/api/export/missing.csv">导出缺失</a>
     <a class="link" href="/api/export/duplicates.csv">导出重复</a>
     <a class="link" href="/api/export/outliers.csv">导出离群</a>

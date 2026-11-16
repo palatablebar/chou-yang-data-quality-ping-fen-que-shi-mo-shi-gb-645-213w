@@ -38,6 +38,9 @@ REASONS: dict[str, dict[str, str]] = {
     "K_KEY_CONFLICT": {"label": "同键取值冲突", "level": "warn"},
     "K_CAPPED": {"label": "该维扣分已封顶", "level": "info"},
     "K_REPLAY": {"label": "同输入重跑复用", "level": "info"},
+    "K_TEMPLATE_COLUMNS_ABSENT": {"label": "模板未提供列已豁免", "level": "info"},
+    "K_TEMPLATE_UNREGISTERED": {"label": "未登记模板按实际列评分", "level": "warn"},
+    "K_TEMPLATE_SWITCH": {"label": "段内模板切换", "level": "info"},
 }
 
 

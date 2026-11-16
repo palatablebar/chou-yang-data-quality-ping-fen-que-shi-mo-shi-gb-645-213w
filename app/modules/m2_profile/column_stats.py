@@ -26,10 +26,14 @@ def top_values(values: list[str], limit: int = 3) -> list[dict]:
 
 
 def describe(column: config.Column, cells: list[dict]) -> dict:
-    total = len(cells)
-    missing = sum(1 for cell in cells if cell["state"] == formats.MISSING)
-    bad = sum(1 for cell in cells if cell["state"] == formats.FORMAT_BAD)
-    ok = [cell for cell in cells if cell["state"] == formats.VALUE]
+    # structural_missing 是「本段模板未提供该列」，不属于三态，整体移出该列的账
+    scored_cells = [cell for cell in cells
+                    if cell.get("state") != "structural_missing"]
+    structural = len(cells) - len(scored_cells)
+    total = len(scored_cells)
+    missing = sum(1 for cell in scored_cells if cell["state"] == formats.MISSING)
+    bad = sum(1 for cell in scored_cells if cell["state"] == formats.FORMAT_BAD)
+    ok = [cell for cell in scored_cells if cell["state"] == formats.VALUE]
     values = [cell["value"] for cell in ok if cell.get("value") is not None]
     distinct = len(set(values))
     non_missing = total - missing
@@ -49,6 +53,7 @@ def describe(column: config.Column, cells: list[dict]) -> dict:
         "quant": column.quant,
         "range": [column.minimum, column.maximum],
         "total": total,
+        "structural": structural,
         "filled": non_missing,
         "missing": missing,
         "missing_rate": rate(missing, total),

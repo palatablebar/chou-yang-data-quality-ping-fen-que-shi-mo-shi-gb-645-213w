@@ -38,6 +38,8 @@
 | TRAP-19 | 一个单元格同时像缺失、越界、离群 | 按代码顺序覆盖，分项之和大于总分 | 固定优先级缺失 > 格式不合格 > 离群，一格只进一个桶 | `app/modules/m5_outliers/flags.py`、`app/modules/m2_profile/formats.py` | `tests/test_m5_outliers.py::test_priority_missing_over_range_over_outlier` |
 | TRAP-22 | 同一组重复行打乱顺序 | 代表行随顺序变化，导出结果不可复现 | 代表行取最小原始行号，组排序按代表行号 | `app/modules/m4_duplicates/groups.py`、`app/modules/m4_duplicates/hashdup.py` | `tests/test_m4_duplicates.py::test_order_independence_of_groups` |
 | TRAP-26 | 旧页面提交覆盖新结果 | 后提交无条件写入，新版本被旧数据顶掉 | 同名数据集版本自增，`expected_version` 落后即 409 | `app/modules/m6_score/runstore.py` | `tests/test_m6_score.py::test_stale_submission_rejected`、`tests/test_e2e.py::test_stale_version_conflict_over_http` |
+| TRAP-27 | 新模板把受理人+区域合并成服务组，附件新旧混用 | 未提供列被当整列缺失，换模板即质量骤降；或只比共有列，新模板真实缺口消失 | 模板注册表 + 字段族：未提供列记 absent/结构性缺失豁免扣分；有效口径照扣真实缺口，核心口径另算可比口径并量化虚扣 | `app/modules/m1_ingest/templates.py`、`app/modules/m6_score/coverage.py`、`app/modules/m6_score/score.py` | `tests/test_templates.py::test_effective_score_counts_real_gaps_but_not_absent_columns`、`tests/test_templates.py::test_core_score_is_comparable_across_templates` |
+| TRAP-28 | 同一文件数据区出现另一种模板的表头（列数不同） | 第二段按首段表头错位取格，或整段被列数校验隔离 | 嵌入式表头识别 + 分段，每段独立表头映射与列数宽度，跨段缺列记结构性缺失 | `app/modules/m1_ingest/sniff.py`、`app/modules/m1_ingest/service.py` | `tests/test_templates.py::test_mixed_template_batch_segments_and_structural_cells`、`tests/test_templates.py::test_mixed_batch_does_not_misread_columns` |
 
 ## 对账规则
 
@@ -63,12 +65,16 @@
   `tests/test_invariants.py::test_rerun_keeps_counts_and_score`（幂等）、
   `tests/test_invariants.py::test_score_is_order_independent`（顺序无关）、
   `tests/test_invariants.py::test_missing_penalty_is_monotonic`（单调）。
+- 模板不变量：`tests/test_templates.py`（双口径闭合、跨模板核心分一致、
+  列重排不读错列、混排结构性豁免、重跑不新增版本、`RULE_VERSION` 不漂移）。
 - 端到端：`tests/test_e2e.py::test_full_pipeline_over_http`。
 
 ## 已知不覆盖
 
 - 只按整份文件重算，不支持增量追加与断点续跑；同名数据集重跑即全量重算。
-- 列契约固定 10 列（`app/config.py`），新增列按未知列忽略而不报错；自定义列需要改契约与别名。
+- 列契约现含 11 列（`app/config.py`），其中 8 个核心列为所有模板必填；
+  模板未提供的契约列按 absent 豁免而非报错，未登记的额外列按未知列忽略，
+  新增模板在 `TEMPLATES` 注册表登记、新增别名在 `ALIASES` 登记即可。
 - 权重、容忍度、等级阈值写在配置里，改完必须重新运行；不支持页面上调参。
 - 只处理 UTF-8 / GB18030 两类编码；UTF-16、Big5、Shift-JIS 会落到 `E_DECODE`。
 - 稳健离群只支持数值列；日期列不做离群判定，文本列只做基数与格式检查。

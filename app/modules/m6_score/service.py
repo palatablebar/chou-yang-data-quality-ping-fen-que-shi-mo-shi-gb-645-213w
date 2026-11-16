@@ -15,6 +15,7 @@ from ..m2_profile import service as m2_service
 from ..m3_missing import service as m3_service
 from ..m4_duplicates import service as m4_service
 from ..m5_outliers import service as m5_service
+from . import coverage as coverage_mod
 from . import runstore
 from . import score as score_mod
 
@@ -74,6 +75,10 @@ def run(settings: config.Settings, store, *, name: str | None = None,
         "tested_cells": outliers["counts"]["tested_cells"],
     }
     scored = score_mod.evaluate(counts)
+    core_counts = _core_counts(profile, duplicates, outliers)
+    core_scored = score_mod.evaluate_core(core_counts)
+    coverage = coverage_mod.build_coverage(
+        ingest, profile, scored, core_scored, len(profile["rows"]))
     stages.append(_stage("score", len(scored["dims"]), 1, 0, clock))
 
     reconcile = _reconcile(ingest, profile, missing, duplicates, outliers, scored)
@@ -96,6 +101,12 @@ def run(settings: config.Settings, store, *, name: str | None = None,
         "outlier_cells": counts["outlier_cells"],
         "tested_cells": counts["tested_cells"],
         "segments": ingest["segments"],
+        "present_columns": len(coverage["present_columns"]),
+        "absent_columns": len(coverage["absent_columns"]),
+        "exempted_cells": coverage["exempted_cells"],
+        "core_cells_total": core_counts["cells_total"],
+        "core_cells_missing": core_counts["cells_missing"],
+        "core_score": core_scored["score"],
     }
     version = store.latest_version(ingest["name"]) + 1
     run_id = manifest.new_run_id()
@@ -105,7 +116,11 @@ def run(settings: config.Settings, store, *, name: str | None = None,
         settings=settings, encoding=ingest["encoding"],
         declared_encoding=ingest["declared_encoding"],
         params={"delimiter": ingest["delimiter"], "segments": ingest["segments"],
-                "declared_encoding": ingest["declared_encoding"]},
+                "declared_encoding": ingest["declared_encoding"],
+                "template": coverage["template_key"],
+                "template_label": coverage["template_label"],
+                "present_columns": coverage["present_columns"],
+                "absent_columns": coverage["absent_columns"]},
         started_at=started_at, finished_at=finished_at,
         elapsed_ms=int((time.perf_counter() - clock) * 1000),
         stages=[_stage_export(item) for item in stages],
@@ -139,12 +154,15 @@ def run(settings: config.Settings, store, *, name: str | None = None,
         "profile": {
             "columns": profile["columns"],
             "profile": profile["profile"],
+            "rows": profile["rows"],
             "counts": profile["counts"],
         },
         "missing": missing,
         "duplicates": duplicates,
         "outliers": outliers,
         "score": scored,
+        "core_score": core_scored,
+        "coverage": coverage,
         "reconcile": reconcile,
         "manifest": payload,
         "replay": False,
@@ -195,7 +213,7 @@ def _reconcile(ingest: dict, profile: dict, missing: dict, duplicates: dict,
                  "采纳 = 唯一 + 重复"),
         _account("cells", "单元格账", cells_total,
                  cells_missing + cells_value,
-                 "单元格 = 缺失 + 有值"),
+                 "单元格 = 缺失 + 有值（仅模板提供列）"),
         _account("value", "有值格账", cells_value,
                  cells_ok + cells_bad,
                  "有值 = 合格 + 格式不合格"),
@@ -227,6 +245,39 @@ def _int_or_none(value) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _core_counts(profile: dict, duplicates: dict, outliers: dict) -> dict:
+    """核心口径分子分母：只统计所有模板共有的核心列。
+
+    缺失/格式按核心列逐格重数；重复取核心列哈希账；离群只可能来自数值列，
+    而全部数值列都在核心列内，故离群分子分母与有效口径相同。
+    """
+    core_set = config.CORE_SET
+    rows = profile["rows"]
+    cells_total = cells_missing = format_bad = 0
+    for row in rows:
+        for name in core_set:
+            if name not in row["cells"]:
+                continue
+            cell = row["cells"][name]
+            if cell.get("state") == "structural_missing":
+                continue
+            cells_total += 1
+            if cell["state"] == "missing":
+                cells_missing += 1
+            elif cell["state"] == "format_bad":
+                format_bad += 1
+    return {
+        "cells_total": cells_total,
+        "cells_missing": cells_missing,
+        "cells_value": cells_total - cells_missing,
+        "format_bad": format_bad,
+        "rows_accepted": len(rows),
+        "rows_dup": duplicates["core_hash"]["duplicate_rows"],
+        "outlier_cells": outliers["counts"]["outlier_cells"],
+        "tested_cells": outliers["counts"]["tested_cells"],
+    }
 
 
 def _json_safe(value):

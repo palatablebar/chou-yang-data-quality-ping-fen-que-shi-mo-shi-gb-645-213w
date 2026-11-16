@@ -14,6 +14,66 @@
   </div>
 </section>
 
+{% if report.coverage %}
+<section class="block">
+  <h2 class="block__title">模板与字段覆盖<span class="block__hint">{{ report.coverage.template_label }}</span></h2>
+  <p class="aside">
+    模板识别：<b>{{ report.coverage.template_label }}</b>
+    （<code>{{ report.coverage.template_key }}</code>{% if not report.coverage.template_matched %} · 未登记，按实际提供列评分{% endif %}）。
+    未提供列记「未提供（豁免）」，不进缺失账、不进单元格总数、不扣分；已提供列的真实空值与格式问题照常扣分。
+  </p>
+  <table class="ledger ledger--wide" data-sortable>
+    <thead>
+      <tr><th>列</th><th>字段族</th><th>覆盖状态</th><th>口径</th><th class="num">缺失</th>
+          <th class="num">缺失率</th><th class="num">格式不合格</th><th class="num">误当缺失的虚增格</th></tr>
+    </thead>
+    <tbody>
+      {% for column in report.coverage.columns %}
+      <tr{% if column.status == "absent" %} class="row--muted"{% endif %}>
+        <td>{{ column.label }}<span class="sub">{{ column.name }}</span></td>
+        <td class="mono">{{ column.family }}</td>
+        <td>{% if column.status == "present" %}<span class="sev sev--pass">已提供</span>{% else %}<span class="tag">未提供（豁免）</span>{% endif %}</td>
+        <td>{% if column.core %}核心列{% else %}模板专属{% endif %}</td>
+        <td class="num">{{ column.missing|intf }}</td>
+        <td class="num">{{ column.missing_rate|pct }}</td>
+        <td class="num">{{ column.format_bad|intf }}</td>
+        <td class="num">{{ column.virtual_missing_if_naive|intf }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <table class="ledger">
+    <thead><tr><th>口径</th><th class="num">总分</th><th>等级</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>有效口径（正式分）</td>
+        <td class="num">{{ report.coverage.effective.score }}</td>
+        <td>{{ report.coverage.effective.grade }}</td>
+        <td class="aside">{{ report.coverage.effective.scope_label }}；已提供列的真实缺口照扣</td>
+      </tr>
+      <tr>
+        <td>核心口径（可比口径）</td>
+        <td class="num">{{ report.coverage.core.score }}</td>
+        <td>{{ report.coverage.core.grade }}</td>
+        <td class="aside">{{ report.coverage.core.scope_label }}</td>
+      </tr>
+      <tr>
+        <td>朴素口径（仅对照，不采用）</td>
+        <td class="num">—</td>
+        <td>—</td>
+        <td class="aside">若把未提供列误当整列缺失，缺失率 {{ report.coverage.naive_comparison.missing_rate_if_naive|pct }}，
+          将虚增缺失扣分 {{ report.coverage.naive_comparison.inflated_missing_penalty }} 分；本报告已避免</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="aside">
+    有效口径与核心口径总分差 <b class="num">{{ report.coverage.score_gap_effective_minus_core }}</b> 分，
+    完全来自模板专属列（受理人 / 区域 / 服务组）的真实缺口；豁免单元格
+    <b class="num">{{ report.coverage.exempted_cells|intf }}</b> 个，不计入任何扣分。
+  </p>
+</section>
+{% endif %}
+
 <section class="block">
   <h2 class="block__title">扣分<span class="block__hint num">{{ report.penalty_sum }} / 100</span></h2>
   <div class="bars" data-bars>
@@ -154,6 +214,7 @@
   <h2 class="block__title">导出</h2>
   <p class="links">
     <a class="link" href="/api/export/report.csv">报告 CSV</a>
+    <a class="link" href="/api/export/coverage.csv">字段覆盖 CSV</a>
     <a class="link" href="/api/export/profile.csv">画像 CSV</a>
     <a class="link" href="/api/export/quarantine.csv">隔离区 CSV</a>
     <a class="link" href="/api/export/manifest.json">运行清单 JSON</a>

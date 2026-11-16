@@ -96,3 +96,17 @@ def evaluate(counts: dict) -> dict:
                      "tolerance": item["tolerance"]} for item in config.WEIGHTS],
         "formula": "100 − 缺失30 − 重复25 − 离群20 − 格式25，每维按容忍度封顶",
     }
+
+
+def evaluate_core(core_counts: dict) -> dict:
+    """核心口径评分：只在所有模板共有的核心列上计算，用于跨模板比较。
+
+    权重、容忍度、量化方式与有效口径完全一致，差别只在分子分母的列范围；
+    因此两口径分数可直接对比，差异完全来自服务归属字段族（受理人/区域/服务组）
+    等模板专属列，而不是评分规则变化。
+    """
+    evaluated = evaluate(core_counts)
+    evaluated["scope"] = "core"
+    evaluated["scope_label"] = "核心口径（仅所有模板共有列）"
+    evaluated["columns"] = list(config.CORE_COLUMNS)
+    return evaluated

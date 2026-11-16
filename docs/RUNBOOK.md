@@ -38,6 +38,7 @@ curl -s -X POST http://127.0.0.1:18204/api/datasets/upload \
 
 # 导出
 curl -s -o /tmp/report.csv http://127.0.0.1:18204/api/export/report.csv
+curl -s -o /tmp/coverage.csv http://127.0.0.1:18204/api/export/coverage.csv
 curl -s http://127.0.0.1:18204/api/export/manifest.json
 ```
 
@@ -45,8 +46,10 @@ curl -s http://127.0.0.1:18204/api/export/manifest.json
 
 | 文件 | 用途 | 期望结果 |
 |---|---|---|
-| `tickets_dirty.csv` | 主演示：哨兵、空白、重复、冲突、越界、分段、截断 | 65.24 分 C 级，隔离 3 行，2 段 |
+| `tickets_dirty.csv` | 主演示：哨兵、空白、重复、冲突、越界、分段、截断 | 65.24 分 C 级（有效口径），隔离 3 行，2 段 |
 | `tickets_clean.csv` | 干净对照 | 100.00 分 A 级 |
+| `tickets_service_v2.csv` | 新模板：服务组并列、含真实空值 | 识别 `service_v2`，agent/region 豁免；有效口径低于核心口径 |
+| `tickets_mixed_templates.csv` | 新旧模板混排 | 标 `K_TEMPLATE_SWITCH`，2 段 0 隔离，跨段缺列结构性豁免 |
 | `tickets_gbk.csv` | GB18030 + 中文表头 | 采信成功，标 `K_ALIAS_MAPPED` |
 | `tickets_bom.csv` | BOM + CRLF | 采信成功，标 `K_BOM_STRIPPED` |
 | `tickets_truncated.csv` | 末行截断 | 隔离 1 行，标 `K_TRUNCATED_TAIL` |
@@ -62,11 +65,16 @@ curl -s http://127.0.0.1:18204/api/export/manifest.json
 | 422 | `E_EMPTY_FILE` | 文件是 0 字节，换一份 |
 | 422 | `E_HEADER_ONLY` | 只有表头，导出补上数据行 |
 | 422 | `E_ALL_BLANK` | 数据行全空，检查导出是否只写了分隔符 |
-| 422 | `E_HEADER_INVALID` | 缺必填列；`detail.missing` 列出缺哪几列 |
+| 422 | `E_HEADER_INVALID` | 缺核心列或整字段族缺失；`detail.missing_core` / `detail.missing_families` 分别列出 |
 | 422 | `E_DECODE` | 编码不在 UTF-8 / GB18030 内，先转码再传 |
 | 404 | `E_SAMPLE_UNKNOWN` | 样例名不在白名单，用 `/api/datasets` 看可用项 |
 | 409 | `E_STALE_RUN` | 页面版本落后；刷新后重跑，别用旧页面覆盖 |
 | 404 | `E_RUN_NOT_FOUND` | 还没有运行记录，先跑一次评分 |
+
+> 模板相关标记（非失败）：`K_TEMPLATE_COLUMNS_ABSENT`（未提供列已豁免）、
+> `K_TEMPLATE_UNREGISTERED`（未登记模板，按实际列评分）、`K_TEMPLATE_SWITCH`
+> （混排文件段内切换模板）。跨模板比较看报告页/清单里的核心口径分，
+> 字段覆盖与扣分影响看 `coverage.csv`。
 
 ## 6 测试
 

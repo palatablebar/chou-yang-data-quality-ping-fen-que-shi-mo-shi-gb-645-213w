@@ -97,11 +97,13 @@ def test_cardinality_uses_filled_as_denominator(settings):
     assert tickets["cardinality"] == Decimal("0.9608")
 
 
-def test_profile_api_lists_contract_columns(client_with_run):
+def test_profile_api_lists_present_columns(client_with_run):
     body = client_with_run.get("/api/profile").json()
     names = [item["name"] for item in body["columns"]]
-    assert names == list(config.COLUMN_NAMES)
+    # 旧模板样例提供除 service_group 外的 10 列；画像只列模板实际提供列
+    assert names == [name for name in config.COLUMN_NAMES if name != "service_group"]
     assert body["counts"]["cells_total"] == expected.DIRTY["cells_total"]
+    assert body["counts"]["absent_columns"] == ["service_group"]
 
 
 def test_cell_endpoint_parses_single_value(client):

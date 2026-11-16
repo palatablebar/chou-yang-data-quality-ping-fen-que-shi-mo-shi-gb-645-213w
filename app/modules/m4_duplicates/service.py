@@ -9,6 +9,7 @@ def build(profile: dict) -> dict:
 
 
 def summary(payload: dict, limit: int = 8) -> dict:
+    core = payload.get("core_hash", {})
     return {
         "rows": payload["rows"],
         "unique_rows": payload["unique_rows"],
@@ -21,4 +22,6 @@ def summary(payload: dict, limit: int = 8) -> dict:
         "top_groups": payload["hash_groups"][:limit],
         "top_conflicts": payload["conflicts"][:limit],
         "identity_columns": payload["identity_columns"],
+        "core_duplicate_rows": core.get("duplicate_rows", 0),
+        "core_columns": core.get("columns", []),
     }

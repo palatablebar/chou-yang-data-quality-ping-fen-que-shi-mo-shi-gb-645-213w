@@ -12,6 +12,7 @@ router = APIRouter(tags=["M1 数据采信"])
 
 
 def _payload(payload: dict) -> dict:
+    present = tuple(payload["header"]["template"]["present"])
     return {
         "name": payload["name"],
         "digest": payload["digest"],
@@ -20,12 +21,14 @@ def _payload(payload: dict) -> dict:
         "delimiter": payload["delimiter"],
         "segments": payload["segments"],
         "header": payload["header"],
+        "template": payload["header"]["template"],
+        "segment_templates": payload.get("segment_templates", []),
         "counts": payload["counts"],
         "quarantine": payload["quarantine"],
         "quarantine_summary": service.quarantine_summary(payload["quarantine"]),
         "flags": service.flag_summary(payload["flags"]),
-        "rows": [{"lineno": row["lineno"],
-                  "cells": [row["cells"][name] for name in config.COLUMN_NAMES]}
+        "rows": [{"lineno": row["lineno"], "segment": row.get("segment", 1),
+                  "cells": [row["cells"][name] for name in present]}
                  for row in payload["rows"][:20]],
     }
 

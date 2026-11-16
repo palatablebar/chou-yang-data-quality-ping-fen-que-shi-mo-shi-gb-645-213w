@@ -9,6 +9,7 @@ from . import csv_out, manifest_out, report
 
 EXPORTS = {
     "report.csv": ("report.csv", "text/csv; charset=utf-8", csv_out.report_csv),
+    "coverage.csv": ("coverage.csv", "text/csv; charset=utf-8", csv_out.coverage_csv),
     "profile.csv": ("profile.csv", "text/csv; charset=utf-8", csv_out.profile_csv),
     "missing.csv": ("missing.csv", "text/csv; charset=utf-8", csv_out.missing_csv),
     "duplicates.csv": ("duplicates.csv", "text/csv; charset=utf-8",

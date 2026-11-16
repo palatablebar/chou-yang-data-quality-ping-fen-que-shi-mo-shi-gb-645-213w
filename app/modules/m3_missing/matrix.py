@@ -7,9 +7,14 @@ from __future__ import annotations
 from .cells import is_missing
 
 
+def _is_scored_missing(cell: dict) -> bool:
+    # 结构性缺失（本段模板未提供该列）不属于数据缺失，不进签名与共缺对
+    return cell.get("state") != "structural_missing" and is_missing(cell)
+
+
 def signature(profile: dict, row: dict) -> tuple[str, ...]:
     return tuple(column["name"] for column in profile["columns"]
-                 if is_missing(row["cells"][column["name"]]))
+                 if _is_scored_missing(row["cells"][column["name"]]))
 
 
 def pattern_table(profile: dict, limit: int = 12) -> list[dict]:
@@ -39,7 +44,7 @@ def co_missing(profile: dict, limit: int = 10) -> list[dict]:
     labels = {column["name"]: column["label"] for column in profile["columns"]}
     counts: dict[tuple[str, str], int] = {}
     for row in profile["rows"]:
-        missing = [name for name in columns if is_missing(row["cells"][name])]
+        missing = [name for name in columns if _is_scored_missing(row["cells"][name])]
         for index, left in enumerate(missing):
             for right in missing[index + 1:]:
                 key = (min(left, right), max(left, right))

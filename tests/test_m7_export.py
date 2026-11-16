@@ -40,12 +40,15 @@ def test_quarantine_csv_carries_lineno_and_code(client_with_run):
     assert "57,2,Q_TRUNCATED_ROW" in text
 
 
-def test_profile_csv_lists_contract_columns(client_with_run):
+def test_profile_csv_lists_present_columns(client_with_run):
     text = get_csv(client_with_run, "profile.csv")
     lines = [line for line in text.splitlines() if line.strip()]
-    assert len(lines) == len(config.COLUMN_NAMES) + 1
-    for name in config.COLUMN_NAMES:
+    # 旧模板提供 10 列（service_group 未提供，豁免不进画像）
+    present = [name for name in config.COLUMN_NAMES if name != "service_group"]
+    assert len(lines) == len(present) + 1
+    for name in present:
         assert name in text
+    assert "service_group" not in text
 
 
 def test_duplicates_csv_lists_conflict_fields(client_with_run):

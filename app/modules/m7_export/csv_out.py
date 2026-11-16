@@ -24,10 +24,15 @@ def report_csv(result: dict) -> str:
     score = result["score"]
     counters = result["manifest"]["counters"]
     rows = [
-        ["总分", score["score"], "分", "刻度 0.01"],
+        ["总分", score["score"], "分", "有效口径，刻度 0.01"],
         ["等级", score["grade"], "", score["grade_label"]],
         ["扣分合计", score["penalty_sum"], "分", "总分 + 扣分 = 100"],
     ]
+    core = result.get("core_score")
+    if core is not None:
+        rows.append(["核心口径总分", core["score"], "分",
+                     "仅所有模板共有列，用于跨模板比较"])
+        rows.append(["核心口径等级", core["grade"], "", core["grade_label"]])
     for item in score["dims"]:
         rows.append([f"{item['label']}扣分", item["penalty"], "分",
                      f"比率 {item['rate']} 容忍度 {item['tolerance']} 封顶 {item['cap']}"])
@@ -38,11 +43,68 @@ def report_csv(result: dict) -> str:
         ["重复行", counters["rows_dup"], "行", ""],
         ["隔离行", counters["quarantine"], "行", ""],
         ["空行", counters["blank"], "行", ""],
-        ["单元格", counters["cells_total"], "格", ""],
+        ["单元格", counters["cells_total"], "格", "仅统计模板实际提供列"],
         ["缺失单元格", counters["cells_missing"], "格", ""],
         ["离群单元格", counters["outlier_cells"], "格", "有值的子集"],
     ])
+    rows.extend(_coverage_rows(result))
     return csv_text(["项目", "数值", "单位", "备注"], rows)
+
+
+def _coverage_rows(result: dict) -> list[list]:
+    coverage = result.get("coverage")
+    if not coverage:
+        return []
+    rows = [
+        ["—— 模板字段覆盖 ——", "", "", ""],
+        ["模板", coverage.get("template_key", ""), "", coverage.get("template_label", "")],
+        ["已提供列数", len(coverage.get("present_columns", [])), "列",
+         "、".join(coverage.get("present_columns", []))],
+        ["未提供列数", len(coverage.get("absent_columns", [])), "列",
+         "、".join(coverage.get("absent_columns", [])) or "无"],
+        ["豁免单元格", coverage.get("exempted_cells", 0), "格",
+         "未提供列若误当整列缺失会虚增的缺失格数，实际不计"],
+    ]
+    naive = coverage.get("naive_comparison")
+    if naive:
+        rows.append(["朴素口径缺失率", naive["missing_rate_if_naive"], "",
+                     naive["detail"]])
+        rows.append(["朴素口径虚增缺失扣分", naive["inflated_missing_penalty"], "分",
+                     "本系统按有效口径评分，已避免该虚扣"])
+    gap = coverage.get("score_gap_effective_minus_core")
+    if gap is not None:
+        rows.append(["有效口径与核心口径总分差", gap, "分",
+                     "差异来自模板专属列（受理人/区域/服务组等）的真实缺口"])
+    rows.append(["覆盖口径说明", "", "", coverage.get("policy", "")])
+    return rows
+
+
+def coverage_csv(result: dict) -> str:
+    coverage = result.get("coverage")
+    if not coverage:
+        return csv_text(["列名", "列标题", "字段族", "覆盖状态", "核心列",
+                         "缺失", "缺失率", "格式不合格", "误当缺失的虚增格", "说明"],
+                        [])
+    rows = []
+    for item in coverage.get("columns", []):
+        rows.append([
+            item["name"], item["label"], item["family"],
+            "已提供" if item["status"] == "present" else "未提供（豁免）",
+            "是" if item["core"] else "否",
+            item.get("missing", 0), item.get("missing_rate", "0.0000"),
+            item.get("format_bad", 0),
+            item.get("virtual_missing_if_naive", 0),
+            item.get("detail", ""),
+        ])
+    for family in coverage.get("families", []):
+        rows.append([
+            f"族:{family['family']}", "", family["family"],
+            "已覆盖" if family["covered"] else "未覆盖",
+            "是" if family["core"] else "否",
+            "", "", "", "", family.get("detail", ""),
+        ])
+    return csv_text(["列名", "列标题", "字段族", "覆盖状态", "核心列",
+                     "缺失", "缺失率", "格式不合格", "误当缺失的虚增格", "说明"], rows)
 
 
 def profile_csv(result: dict) -> str:

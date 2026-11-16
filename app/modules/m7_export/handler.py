@@ -28,6 +28,11 @@ def export_report(run_id: str | None = None, ctx: Ctx = Depends(get_ctx)):
     return service.export(ctx.store, "report.csv", run_id)
 
 
+@router.get("/api/export/coverage.csv")
+def export_coverage(run_id: str | None = None, ctx: Ctx = Depends(get_ctx)):
+    return service.export(ctx.store, "coverage.csv", run_id)
+
+
 @router.get("/api/export/profile.csv")
 def export_profile(run_id: str | None = None, ctx: Ctx = Depends(get_ctx)):
     return service.export(ctx.store, "profile.csv", run_id)

@@ -217,6 +217,8 @@ span.sev--pass { color: var(--ok); }
   padding: 0 5px;
   border-radius: var(--radius-sm);
 }
+.row--muted { color: var(--ink-muted); }
+.row--muted .sub { opacity: .7; }
 
 .statline {
   margin: 0 0 30px;

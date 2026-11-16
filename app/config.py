@@ -94,6 +94,8 @@ COLUMNS: tuple[Column, ...] = (
            numeric=True),
     Column("agent", "受理人", "text"),
     Column("region", "区域", "text"),
+    # 新模板把「受理人 + 区域」合并为服务组；与 agent/region 同属 service_owner 字段族
+    Column("service_group", "服务组", "text"),
     Column("priority", "优先级", "enum", enums=("P1", "P2", "P3")),
 )
 
@@ -114,9 +116,87 @@ ALIASES: dict[str, tuple[str, ...]] = {
     "satisfaction": ("satisfaction", "满意度", "评分"),
     "agent": ("agent", "受理人", "客服", "坐席"),
     "region": ("region", "区域", "大区"),
+    "service_group": ("service_group", "服务组", "服务团队", "客服组", "组"),
     "priority": ("priority", "优先级", "等级"),
 }
-REQUIRED_COLUMNS = COLUMN_NAMES
+
+# ---------------------------------------------------------------------------
+# 模板族与模板注册表
+#
+# 渠道抽检附件存在新旧两套模板：旧模板拆「受理人 agent」「区域 region」两列，
+# 新模板把二者合并为「服务组 service_group」一列。它们是同一业务字段族的
+# 不同布局，不是缺失：
+# - 模板未提供的列记 absent，不进缺失账、不进单元格总数，避免模板切换被
+#   误读成质量骤降；
+# - 核心列（CORE_COLUMNS）所有模板都必须提供，只按核心列重算的「核心口径」
+#   分用于跨模板横向/纵向比较；
+# - 同字段族内任一成员出现即视为该族已覆盖（required_families 只做 422 校验）。
+# ---------------------------------------------------------------------------
+
+# 字段族：同组列互为新旧模板的等价布局
+FIELD_FAMILIES: dict[str, tuple[str, ...]] = {
+    "ticket_id": ("ticket_id",),
+    "customer_id": ("customer_id",),
+    "channel": ("channel",),
+    "created_at": ("created_at",),
+    "first_response_min": ("first_response_min",),
+    "handle_hours": ("handle_hours",),
+    "satisfaction": ("satisfaction",),
+    "service_owner": ("agent", "region", "service_group"),
+    "priority": ("priority",),
+}
+COLUMN_FAMILY: dict[str, str] = {
+    member: family for family, members in FIELD_FAMILIES.items() for member in members
+}
+
+# 核心列：所有模板都必须提供，核心口径评分只在这些列上计算
+CORE_COLUMNS: tuple[str, ...] = (
+    "ticket_id", "customer_id", "channel", "created_at",
+    "first_response_min", "handle_hours", "satisfaction", "priority",
+)
+CORE_SET = frozenset(CORE_COLUMNS)
+
+# 必须覆盖的字段族：缺任一整族（族内一个成员列都没有）才 422
+REQUIRED_FAMILIES: tuple[str, ...] = tuple(FIELD_FAMILIES.keys())
+
+
+@dataclass(frozen=True)
+class TemplateSpec:
+    """一个附件模板：键、名称、它实际提供的契约列（按布局顺序）。"""
+
+    key: str
+    label: str
+    columns: tuple[str, ...]
+
+    @property
+    def column_set(self) -> frozenset[str]:
+        return frozenset(self.columns)
+
+
+TEMPLATES: tuple[TemplateSpec, ...] = (
+    TemplateSpec(
+        key="legacy_v1",
+        label="旧模板 · 受理人 + 区域 分列",
+        columns=("ticket_id", "customer_id", "channel", "created_at",
+                 "first_response_min", "handle_hours", "satisfaction",
+                 "agent", "region", "priority"),
+    ),
+    TemplateSpec(
+        key="service_v2",
+        label="新模板 · 服务组合并列",
+        columns=("ticket_id", "customer_id", "channel", "created_at",
+                 "first_response_min", "handle_hours", "satisfaction",
+                 "service_group", "priority"),
+    ),
+)
+TEMPLATE_MAP: dict[str, TemplateSpec] = {item.key: item for item in TEMPLATES}
+# 表头按列名映射，与列顺序无关：模板调整列布局（换位/改名走别名）照常采信
+TEMPLATE_BY_COLUMNS: dict[frozenset[str], TemplateSpec] = {
+    item.column_set: item for item in TEMPLATES
+}
+# 422 校验只要求核心列齐全 + 服务归属字段族至少出现一个成员，
+# agent/region/service_group 自身不再是必填列。
+REQUIRED_COLUMNS = tuple(CORE_COLUMNS)
 
 # 评分维度：封顶分值与容忍度（比率达到容忍度即扣满该维）
 WEIGHTS: tuple[dict, ...] = (
@@ -143,6 +223,8 @@ SEVERITY_BANDS: tuple[dict, ...] = (
 SAMPLES: dict[str, str] = {
     "tickets_dirty.csv": "脏样例 · 7 类问题",
     "tickets_clean.csv": "干净样例",
+    "tickets_service_v2.csv": "新模板 · 服务组（含空值）",
+    "tickets_mixed_templates.csv": "新旧模板混用批次",
     "tickets_gbk.csv": "GB18030 编码",
     "tickets_bom.csv": "BOM + CRLF",
     "tickets_truncated.csv": "末行截断",

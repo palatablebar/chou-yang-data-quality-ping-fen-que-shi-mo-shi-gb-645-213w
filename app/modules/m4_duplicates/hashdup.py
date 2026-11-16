@@ -9,12 +9,14 @@ from __future__ import annotations
 import hashlib
 import json
 
-from ... import config
-
 MISSING_TOKEN = "\u0000MISSING"
+STRUCTURAL_TOKEN = "\u0000STRUCTURAL"
 
 
 def canonical_cell(cell: dict) -> str:
+    if cell.get("state") == "structural_missing":
+        # 段模板未提供该列：用固定占位参与哈希，保证同模板行可比较、两次运行一致
+        return STRUCTURAL_TOKEN
     if cell["state"] == "missing":
         return MISSING_TOKEN
     if cell["state"] == "format_bad":
@@ -24,7 +26,9 @@ def canonical_cell(cell: dict) -> str:
 
 
 def canonical_row(profile: dict, row: dict) -> dict:
-    return {name: canonical_cell(row["cells"][name]) for name in config.COLUMN_NAMES}
+    # 只哈希本次模板提供的列：未提供列不存在于 cells，也不应参与行身份
+    names = [column["name"] for column in profile["columns"]]
+    return {name: canonical_cell(row["cells"][name]) for name in names}
 
 
 def row_hash(profile: dict, row: dict) -> str:

@@ -6,7 +6,25 @@
 
 - 一个 FastAPI 服务、Jinja2 模板、原生 HTML/CSS/JS、SQLite 存数据集与运行记录
 - 端口 `18204`（容器内 `8000`）
-- 规则唯一来源：`app/config.py`（权重、容忍度、刻度、阈值）；原因码唯一来源：`app/reasons.py`
+- 规则唯一来源：`app/config.py`（权重、容忍度、刻度、阈值、模板注册表）；原因码唯一来源：`app/reasons.py`
+
+## 新旧模板怎么比（字段覆盖与双口径）
+
+渠道抽检附件混用两套模板：旧模板拆「受理人 `agent`」「区域 `region`」，新模板
+合并为「服务组 `service_group`」，部分工单还有空值。
+
+- **模板未提供 ≠ 数据缺失**：未提供列记 `absent`（混排批次里按段记
+  `structural_missing`），不进缺失账、不进单元格总数、不扣分，模板切换不会被
+  误读成质量骤降；
+- **有效口径（正式分）**：只在模板实际提供的列上评分，已提供列的真实空值、
+  格式、重复、离群照常扣分，新模板的真实缺口不会因「只比共有字段」而消失；
+- **核心口径（可比口径）**：在 8 个所有模板共有的核心列上用同一套权重重算，
+  专供新旧模板横向 / 纵向比较；
+- **字段覆盖披露**：报告页「模板与字段覆盖」区块、`coverage.csv`、报告 CSV 与
+  `manifest.json` 都逐列说明覆盖状态、误当缺失会虚增的格数与虚扣分、两口径总分差；
+- **兼容与幂等**：按列名（含中文别名）映射、与物理列序无关，列布局调整不读错列；
+  数据区出现另一模板表头按分段处理。模板能力不改 `RULE_VERSION` 与幂等键，
+  整批重跑复用同一运行记录，不新增版本、不丢记录。
 
 ## 能力
 
@@ -18,18 +36,18 @@
 | 重复判定 | 全行哈希账与业务键账分开；同键不同值的两行都保留原值并列出冲突列 |
 | 稳健离群 | 中位数 + MAD 稳健 z，MAD=0 回退 IQR/1.349，离散度低于刻度下限判退化 |
 | 评分 | 100 − 缺失 30 − 重复 25 − 离群 20 − 格式 25，每维按容忍度封顶，Decimal 计分 |
-| 批次与导出 | run_id、输入 sha256、版本自增、同输入幂等复用、陈旧提交 409、六种 CSV + 清单 JSON |
+| 批次与导出 | run_id、输入 sha256、版本自增、同输入幂等复用、陈旧提交 409、七种 CSV（含字段覆盖）+ 清单 JSON |
 
 ## 功能模块
 
 | 模块 | 入口 | 核心文件 | 测试 |
 |---|---|---|---|
-| M1 数据采信 | `POST /api/datasets/import`、`POST /api/datasets/upload` | `app/modules/m1_ingest/decode.py`、`reader.py`、`sniff.py`、`service.py` | `tests/test_m1_ingest.py` |
+| M1 数据采信 | `POST /api/datasets/import`、`POST /api/datasets/upload` | `app/modules/m1_ingest/decode.py`、`reader.py`、`sniff.py`、`templates.py`、`service.py` | `tests/test_m1_ingest.py`、`tests/test_templates.py` |
 | M2 字段画像 | `GET /api/profile`、`POST /api/profile/cell`、页面 `/profile` | `app/modules/m2_profile/formats.py`、`column_stats.py`、`profile.py` | `tests/test_m2_profile.py` |
 | M3 缺失模式 | `GET /api/missing`、页面 `/missing` | `app/modules/m3_missing/cells.py`、`runs.py`、`matrix.py` | `tests/test_m3_missing.py` |
-| M4 重复判定 | `GET /api/duplicates`、页面 `/duplicates` | `app/modules/m4_duplicates/hashdup.py`、`keydup.py`、`groups.py` | `tests/test_m4_duplicates.py` |
+| M4 重复判定 | `GET /api/duplicates`、页面 `/duplicates` | `app/modules/m4_duplicates/hashdup.py`、`keydup.py`、`groups.py`（含核心列哈希账） | `tests/test_m4_duplicates.py` |
 | M5 稳健离群 | `GET /api/outliers`、页面 `/outliers` | `app/modules/m5_outliers/robust.py`、`zscore.py`、`flags.py` | `tests/test_m5_outliers.py` |
-| M6 评分与批次 | `POST /api/score`、`GET /api/batches`、`GET /api/reconcile`、页面 `/batches` | `app/modules/m6_score/score.py`、`grade.py`、`runstore.py`、`service.py` | `tests/test_m6_score.py` |
+| M6 评分与批次 | `POST /api/score`、`GET /api/batches`、`GET /api/reconcile`、页面 `/batches` | `app/modules/m6_score/score.py`、`coverage.py`、`grade.py`、`runstore.py`、`service.py` | `tests/test_m6_score.py`、`tests/test_templates.py` |
 | M7 报告导出 | `GET /`、`GET /api/export/*` | `app/modules/m7_export/report.py`、`csv_out.py`、`manifest_out.py` | `tests/test_m7_export.py` |
 
 ## 核心规则
@@ -58,12 +76,14 @@ open http://127.0.0.1:18204/
 
 ## 演示步骤
 
-1. 打开 `/`，样例选 `tickets_dirty.csv`，点「采信并评分」→ 报告页显示 65.24 分 C 级。
-2. `/profile` 看待映射列与格式不合格；`/missing` 看连续缺失段与共缺对。
-3. `/duplicates` 看全行重复组与 `T-2026-000204` 的冲突列。
-4. `/outliers` 看 `first_response_min` 的极端值与 `satisfaction` 的退化标记。
-5. `/batches` 看版本、阈值与五项对账；再点「重跑」验证幂等复用。
-6. 任一页面底部导出 CSV，或直接 `curl /api/export/manifest.json` 取运行清单。
+1. 打开 `/`，样例选 `tickets_dirty.csv`，点「采信并评分」→ 报告页显示 65.24 分 C 级（有效口径），同页给出核心口径分与字段覆盖表。
+2. 选 `tickets_service_v2.csv`（新模板）→ 覆盖表中 `agent`/`region` 标「未提供（豁免）」，`service_group` 的真实空值照常计缺失；报告 CSV 给出朴素口径会虚扣的分值。
+3. 选 `tickets_mixed_templates.csv`（新旧混排）→ 标记 `K_TEMPLATE_SWITCH`，两段各自表头取格，跨段缺列记结构性豁免，无数据行被隔离。
+4. `/profile` 看待映射列与格式不合格；`/missing` 看连续缺失段与共缺对。
+5. `/duplicates` 看全行重复组与 `T-2026-000204` 的冲突列。
+6. `/outliers` 看 `first_response_min` 的极端值与 `satisfaction` 的退化标记。
+7. `/batches` 看版本、模板、双口径分与五项对账；再点「重跑」验证幂等复用（版本号不变）。
+8. 任一页面底部导出 CSV（含 `coverage.csv` 字段覆盖），或直接 `curl /api/export/manifest.json` 取带 `template_coverage` 与 `core_score` 的运行清单。
 
 ## API 与页面
 
@@ -82,7 +102,7 @@ open http://127.0.0.1:18204/
 | POST | `/api/score` | 跑一次评分（可带 `expected_version`） |
 | GET | `/api/batches` | 运行历史 |
 | GET | `/api/reconcile` | 五项对账 |
-| GET | `/api/export/report.csv` 等 | 六种 CSV + `manifest.json` |
+| GET | `/api/export/report.csv` 等 | 七种 CSV（含 `coverage.csv`）+ `manifest.json` |
 | GET | `/`、`/profile`、`/missing`、`/duplicates`、`/outliers`、`/batches` | 六个页面 |
 
 ## 目录
@@ -94,7 +114,7 @@ app/
   templates/  base.html + 6 页
   static/     theme.css layout.css components.css app.js table.js charts.js
 docs/         DEPTH.md DATA-DICTIONARY.md RUNBOOK.md
-sample_data/  9 个 CSV（脏、干净、GB18030、BOM、截断、常量列、仅表头、空行、空文件）
+sample_data/  11 个 CSV（脏、干净、新模板服务组、新旧混排、GB18030、BOM、截断、常量列、仅表头、空行、空文件）
 tests/        conftest.py + 7 个模块测试 + e2e + invariants + fixtures
 ```
 

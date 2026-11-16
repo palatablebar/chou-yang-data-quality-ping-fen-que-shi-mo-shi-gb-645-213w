@@ -64,7 +64,8 @@ def group(profile: dict) -> dict:
 
 def _differing_columns(rows: list[dict]) -> list[str]:
     differing = []
-    for name in config.COLUMN_NAMES:
+    names = list(rows[0]["cells"].keys())
+    for name in names:
         values = {canonical_cell(row["cells"][name]) for row in rows}
         if len(values) > 1:
             differing.append(name)

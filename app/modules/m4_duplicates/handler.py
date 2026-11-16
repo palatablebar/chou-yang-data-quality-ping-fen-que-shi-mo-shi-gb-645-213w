@@ -22,7 +22,8 @@ def api_duplicates(run_id: str | None = None, ctx: Ctx = Depends(get_ctx)) -> di
             "hash_groups": duplicates["hash_groups"],
             "key_repeats": duplicates["key_repeats"],
             "conflicts": duplicates["conflicts"],
-            "identity_columns": duplicates["identity_columns"]}
+            "identity_columns": duplicates["identity_columns"],
+            "core_hash": duplicates.get("core_hash", {})}
 
 
 @router.get("/duplicates")

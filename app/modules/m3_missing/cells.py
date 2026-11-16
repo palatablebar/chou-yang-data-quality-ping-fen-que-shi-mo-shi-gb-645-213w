@@ -25,20 +25,27 @@ def account(profile: dict) -> dict:
     }
     by_row: list[dict] = []
     missing_total = 0
+    structural_total = 0
     for row in rows:
         row_missing = 0
+        row_structural = 0
         for name in columns:
             cell = row["cells"][name]
+            if cell.get("state") == "structural_missing":
+                # 模板未提供：不是缺失，也不是有值，整格移出账目
+                row_structural += 1
+                continue
             if is_missing(cell):
                 by_column[name]["missing"] += 1
                 row_missing += 1
             else:
                 by_column[name]["filled"] += 1
         missing_total += row_missing
+        structural_total += row_structural
         by_row.append({"lineno": row["lineno"], "missing": row_missing,
-                       "total": len(columns)})
+                       "total": len(columns) - row_structural})
 
-    total_cells = len(rows) * len(columns)
+    total_cells = len(rows) * len(columns) - structural_total
     column_rows = []
     for name in columns:
         item = by_column[name]
@@ -50,6 +57,7 @@ def account(profile: dict) -> dict:
         "cells_total": total_cells,
         "missing": missing_total,
         "filled": total_cells - missing_total,
+        "structural_cells": structural_total,
         "by_column": column_rows,
         "by_row": by_row,
         "closed": (missing_total + (total_cells - missing_total) == total_cells
